@@ -29,6 +29,20 @@ class RedisJobRepository implements JobRepository
     ];
 
     /**
+     * The number of minutes until recent jobs should be purged.
+     *
+     * @var int
+     */
+    public $recentJobExpires;
+
+    /**
+     * The number of minutes until failed jobs should be purged.
+     *
+     * @var int
+     */
+    public $failedJobExpires;
+
+    /**
      * Create a new repository instance.
      *
      * @param  \Illuminate\Contracts\Redis\Factory  $redis
@@ -37,6 +51,8 @@ class RedisJobRepository implements JobRepository
     public function __construct(RedisFactory $redis)
     {
         $this->redis = $redis;
+        $this->recentJobExpires = config('horizon.trim.recent', 60);
+        $this->failedJobExpires = config('horizon.trim.failed', 10080);
     }
 
     /**
@@ -216,7 +232,7 @@ class RedisJobRepository implements JobRepository
             );
 
             $pipe->expireat(
-                $payload->id(), Chronos::now()->addHours(1)->getTimestamp()
+                $payload->id(), Chronos::now()->addMinutes($this->recentJobExpires)->getTimestamp()
             );
         });
     }
@@ -354,7 +370,7 @@ class RedisJobRepository implements JobRepository
             ? $pipe->hmset($id, ['status' => 'failed'])
             : $pipe->hmset($id, ['status' => 'completed', 'completed_at' => time()]);
 
-        $pipe->expireat($id, Chronos::now()->addHours(1)->getTimestamp());
+        $pipe->expireat($id, Chronos::now()->addMinutes($this->recentJobExpires)->getTimestamp());
     }
 
     /**
@@ -417,7 +433,7 @@ class RedisJobRepository implements JobRepository
     public function trimRecentJobs()
     {
         $this->connection()->pipeline(function ($pipe) {
-            $score = Chronos::now()->subHours(1)->getTimestamp() * -1;
+            $score = Chronos::now()->subMinutes($this->recentJobExpires)->getTimestamp() * -1;
 
             $pipe->zremrangebyscore('recent_jobs', $score, '+inf');
 
@@ -433,7 +449,7 @@ class RedisJobRepository implements JobRepository
     public function trimFailedJobs()
     {
         $this->connection()->zremrangebyscore(
-            'failed_jobs', Chronos::now()->subDays(7)->getTimestamp() * -1, '+inf'
+            'failed_jobs', Chronos::now()->subMinutes($this->failedJobExpires)->getTimestamp() * -1, '+inf'
         );
     }
 
@@ -480,7 +496,7 @@ class RedisJobRepository implements JobRepository
             );
 
             $pipe->expireat(
-                $payload->id(), Chronos::now()->addDays(7)->getTimestamp()
+                $payload->id(), Chronos::now()->addMinutes($this->failedJobExpires)->getTimestamp()
             );
         });
     }

@@ -45,6 +45,22 @@ return [
 
     /*
     |--------------------------------------------------------------------------
+    | Job Trimming Times
+    |--------------------------------------------------------------------------
+    |
+    | Here you can configure for how long (in minutes) you desire Horizon to
+    | persist the recent and failed jobs. Typically, recent jobs are kept
+    | for one hour while all failed jobs are stored for an entire week.
+    |
+    */
+
+    'trim' => [
+        'recent' => 60,
+        'failed' => 10080,
+    ],
+
+    /*
+    |--------------------------------------------------------------------------
     | Queue Worker Configuration
     |--------------------------------------------------------------------------
     |

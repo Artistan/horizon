@@ -52,6 +52,8 @@ class WorkerProcess
     {
         $this->output = $callback;
 
+        $this->cooldown();
+
         $this->process->start($callback);
 
         return $this;
@@ -106,21 +108,7 @@ class WorkerProcess
             event(new WorkerProcessRestarting($this));
         }
 
-        // Here we will reset the cooldown period timestamp since we are attempting to
-        // restart the process again. We will start the process and give it several
-        // milliseconds to get started up before we check its new running status.
-        $this->restartAgainAt = null;
-
         $this->start($this->output);
-
-        usleep(250 * 1000);
-
-        // If the process is still not running after giving it some time, we will just
-        // begin the cooldown period so we do not try to restart this process again
-        // too soon and overwhelm the application's log or error handling layers.
-        if (! $this->process->isRunning()) {
-            $this->cooldown();
-        }
     }
 
     /**
@@ -154,9 +142,21 @@ class WorkerProcess
      */
     protected function cooldown()
     {
-        $this->restartAgainAt = Chronos::now()->addMinutes(1);
+        if ($this->coolingDown()) {
+            return;
+        }
 
-        event(new UnableToLaunchProcess($this));
+        if ($this->restartAgainAt) {
+            $this->restartAgainAt = ! $this->process->isRunning()
+                            ? Chronos::now()->addMinute()
+                            : null;
+
+            if (! $this->process->isRunning()) {
+                event(new UnableToLaunchProcess($this));
+            }
+        } else {
+            $this->restartAgainAt = Chronos::now()->addSecond();
+        }
     }
 
     /**
